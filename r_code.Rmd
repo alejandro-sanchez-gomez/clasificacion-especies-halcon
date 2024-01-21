@@ -1,0 +1,441 @@
+---
+title: 'Minería de datos: PEC2 - Métodos no supervisados'
+author: "Autor: Alejandro Sánchez Gómez"
+date: "Octubre 2023"
+output:
+  html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(max.print=100)
+```
+
+# Ejercicios
+Los ejercicios se realizarán en base al juego de datos *Hawks* presente en el paquete R *Stat2Data*.  
+
+Los estudiantes y el profesorado del Cornell College en Mount Vernon, Iowa, recogieron datos durante muchos años en el mirador de halcones del lago MacBride, cerca de Iowa City, en el estado de Iowa. El conjunto de datos que analizamos aquí es un subconjunto del conjunto de datos original, utilizando sólo aquellas especies para las que había más de 10 observaciones. Los datos se recogieron en muestras aleatorias de tres especies diferentes de halcones: Colirrojo, Gavilán y Halcón de Cooper.  
+
+Hemos seleccionado este juego de datos por su parecido con el juego de datos *penguins* y por su potencial a la hora de aplicarle algoritmos de minería de datos no supervisados. Las variables numéricas en las que os basaréis son: *Wing*, *Weight*, *Culmen*, *Hallux*  
+
+
+```{r message= FALSE, warning=FALSE}
+if (!require('Stat2Data')) install.packages('Stat2Data')
+library(Stat2Data)
+data("Hawks")
+summary(Hawks)
+```
+
+
+## Ejercicio 1
+Presenta el juego de datos, nombre y significado de cada columna, así como las distribuciones de sus valores.  
+
+Realiza un estudio aplicando el método K-means, similar al de los ejemplos 1.1 y 1.2   
+
+### Respuesta 1
+Los ejercicios se realizarán en base al juego de datos *Hawks* presente en el paquete R *Stat2Data*.  
+
+Este dataset está previamente trabajado para que los datos estén limpios y sin errores. De no ser así, se debería buscar errores, valores nulos u outliers. Deberíamos tratar de discretizar o eliminar columnas. Incluso realizar este último paso varias veces para comprobar los diferentes resultados y elegir el que mejor rendimiento nos dé. De todos modos contiene algún valor nulo que trataremos más adelante.
+
+```{r message= FALSE, warning=FALSE}
+str(Hawks)
+```
+
+El juego de datos cuenta con *908 observaciones* y *19 variables*. A continuación, presentaremos las variables:
+
+  - *Month* = Mes de la observación. Siendo 1 = Enero, ..., 12 = Diciembre.
+  - *Day* = Día (1-31) del mes de la observación.
+  - *Year* = Año (1992-2003) de la observación.
+  - *CaptureTime* = Tiempo de captura (HH:MM).
+  - *ReleaseTime* = Tiempo de liberación (HH:MM).
+  - *BandNumber* = Código de identificación de la banda.
+  - *Species* = CH = Halcón de Cooper, RT = Colirrojo, SS = Gavilán.
+  - *Age* = A = Adulto, I = Inmaduro.
+  - *Sex* = F = Mujer, M = Hombre.
+  - *Wing* = Longitud (mm) de la pluma primaria del ala desde la punta hasta la muñeca a la que se une.
+  - *Weight* = Peso (g).
+  - *Culmen* = Longitud (mm) de la parte superior del pico desde la punta hasta la parte carnosa del ave.
+  - *Hallux* = Longitud (mm) de la garra.
+  - *Tail* = Medida (mm) relativa a la longitud de la cola.
+  - *StandardTail* = Medida estandarizada de la longitud de la cola (mm).
+  - *Tarsus* = Longitud del hueso básico del pie (mm).
+  - *WingPitFat* = Cantidad de grasa en el hueso del ala.
+  - *KeelFat* = Cantidad de grasa en el esternón.
+  - *Crop* = Cantidad de material en el buche, codificada de 1=lleno a 0=vacío.
+  
+El enunciado nos plantea clasificar mediante el método no supervisado k-means las diferentes especies en función de las variables *Wing*, *Weight*, *Culmen* y *Hallux*. Por lo tanto, eliminaremos el resto de variables que no sean las antes descritas:
+
+```{r message= FALSE, warning=FALSE}
+df <- Hawks[, c('Wing', 'Weight', 'Culmen', 'Hallux')]
+df
+```
+
+A continuación, eliminaremos los valores no disponibles para que estos no interfieran en la construcción del modelo:
+
+```{r message=FALSE, warning=FALSE}
+if (!require('dplyr')) install.packages('dplyr')
+library(dplyr)
+
+df <- na.omit(df)
+df
+```
+
+Ahora procedemos a deducir el número de clúster que necesitamos. La primera técnica a emplear es calcular el valor de las siluetas media:
+
+```{r message=FALSE, warning=FALSE}
+if (!require('cluster')) install.packages('cluster')
+library('cluster')
+
+d <- daisy(df)
+resultados <- rep(0, 10)
+for(i in c(2, 3, 4, 5, 6, 7, 8, 9, 10)){
+  fit <- kmeans(df, i)
+  y_cluster <- fit$cluster
+  sk <- silhouette(y_cluster, d)
+  resultados[i] <- mean(sk[,3])
+}
+plot(2:10,resultados[2:10],type="o",col="blue",pch=0,xlab="Número de clusters",ylab="Silueta")
+```
+
+Observamos que el modelo comienza a presentar una menor desviación a partir de k=6. 
+
+Puesto que sabemos que el valor de k debería ser 3, probaremos a buscar un mejor modelo. Para ello, usaremos aquel que ofrece la menor suma de los cuadrados de las distancias de los puntos de cada grupo con respecto a su centro (withinss), con la mayor separación entre centros de grupos (betweenss).
+
+La selección del número de clústers se basará en emplear el método *elbow* (codo), que no es más que la selección del número de clústers en base a la inspección de la gráfica que se obtiene al iterar con el mismo conjunto de datos para distintos valores del número de clústers. 
+
+```{r message=FALSE, warning=FALSE}
+resultados <- rep(0, 10)
+for (i in c(2,3,4,5,6,7,8,9,10))
+{
+  fit           <- kmeans(df, i)
+  resultados[i] <- fit$tot.withinss
+}
+plot(2:10,resultados[2:10],type="o",col="blue",pch=0,xlab="Número de clusters",ylab="tot.tot.withinss")
+```
+
+En este caso, el número de clústers óptimo es 4, pues la curva comienza a estabilizarse.
+
+Aplicaremos otro método de validación. En este caso la función kmeansruns, del paquete fpc. Éste ejecuta el algoritmo kmeans con un conjunto de valores, para después seleccionar el valor del número de clústers que mejor funcione de acuerdo a dos criterios: la silueta media (“asw”) y Calinski-Harabasz (“ch”).
+
+```{r message=FALSE, warning=FALSE}
+if (!require('fpc')) install.packages('fpc')
+library(fpc)
+fit_ch  <- kmeansruns(df, krange = 1:10, criterion = "ch") 
+fit_asw <- kmeansruns(df, krange = 1:10, criterion = "asw") 
+```
+
+Inspeccionemos la silueta media y Calinski-Harabasz respectivamente:
+
+```{r message=FALSE, warning=FALSE}
+
+fit_ch$bestk
+plot(1:10,fit_ch$crit,type="o",col="blue",pch=0,xlab="Número de clústers",ylab="Criterio Calinski-Harabasz")
+
+fit_asw$bestk
+plot(1:10,fit_asw$crit,type="o",col="blue",pch=0,xlab="Número de clústers",ylab="Criterio silueta media")
+
+```
+
+Los resultados son muy parecidos a los que hemos obtenido anteriormente. Con el criterio de la silueta media se obtienen dos clústers y con el Calinski-Harabasz se obtienen 3.
+
+Obtamos por 3 clústers debido a que sabemos préviamente el número de clústers ideales. De lo contrario, la tarea no sería sencilla y quedaría a validación externa cuál es el más óptimo.
+
+A continuación, agruparemos dos variables mediante k-means y luego lo compararemos con el valor real para determinar que variables determinan que halcón pertenece a una espécie u otra.
+
+```{r message=FALSE, warning=FALSE}
+hawks3clusters <- kmeans(df, 3)
+
+#Wing y Weight
+wing_weight = df[c(1, 2)]
+plot(wing_weight, col=hawks3clusters$cluster, main="K-Means")
+plot(wing_weight, col=as.factor(Hawks$Species), main="Real")
+
+#Wing y Culmen
+wing_culmen = df[c(1, 3)]
+plot(wing_culmen, col=hawks3clusters$cluster, main="K-Means")
+plot(wing_culmen, col=as.factor(Hawks$Species), main="Real")
+
+#Wing y Hallax
+wing_hallax = df[c(1, 4)]
+plot(wing_hallax, col=hawks3clusters$cluster, main="K-Means")
+plot(wing_hallax, col=as.factor(Hawks$Species), main="Real")
+
+#Weight y Culmen
+weight_culmen = df[c(2, 3)]
+plot(weight_culmen, col=hawks3clusters$cluster, main="K-Means")
+plot(weight_culmen, col=as.factor(Hawks$Species), main="Real")
+
+#Weight y Hallax
+weight_hallax = df[c(2, 4)]
+plot(weight_hallax, col=hawks3clusters$cluster, main="K-Means")
+plot(weight_hallax, col=as.factor(Hawks$Species), main="Real")
+
+#Culmen y Hallax
+culmen_hallax = df[c(3, 4)]
+plot(culmen_hallax, col=hawks3clusters$cluster, main="K-Means")
+plot(culmen_hallax, col=as.factor(Hawks$Species), main="Real")
+
+```
+
+Como se puede observar, las variables que nos piden analizar están demasiado agrupadas entre ellas como para poder utilizarse como característica determinante de la espécie.
+
+
+## Ejercicio 2
+Con el juego de datos proporcionado realiza un estudio aplicando DBSCAN y OPTICS, similar al del ejemplo 2  
+
+### Respuesta 2
+
+A continuación, vamos ha trabajar los algoritmos DBSCAN y OPTICS como métodos de clustering que permiten la generación de grupos no radiales a diferencia de k-means. Veremos que su parámetro de entrada más relevante es minPts que define la mínima densidad aceptada alrededor de un centroide. Incrementar este parámetro nos permitirá reducir el ruido (observaciones no asignadas a ningún cluster).
+
+Instalamos las librerías necesarias:
+
+```{r message=FALSE, warning=FALSE}
+if (!require('dbscan')) install.packages('dbscan')
+library(dbscan)
+```
+
+Normalizamos el conjunto de datos:
+
+```{r message=FALSE, warning=FALSE}
+df$Wing <- scale(df$Wing, center = min(df$Wing), scale = max(df$Wing) - min(df$Wing))
+df$Weight <- scale(df$Weight, center = min(df$Weight), scale = max(df$Weight) - min(df$Weight))
+df$Culmen <- scale(df$Culmen, center = min(df$Culmen), scale = max(df$Culmen) - min(df$Culmen))
+df$Hallux <- scale(df$Hallux, center = min(df$Hallux), scale = max(df$Hallux) - min(df$Hallux))
+```
+
+Creamos los pares para realizar el estudio:
+
+```{r message=FALSE, warning=FALSE}
+wing_weight = df[c(1, 2)]
+wing_culmen = df[c(1, 3)]
+wing_hallax = df[c(1, 4)]
+weight_culmen = df[c(2, 3)]
+weight_hallax = df[c(2, 4)]
+culmen_hallax = df[c(3, 4)]
+```
+
+
+#### OPTICS
+
+Una de las primeras actividades que realiza el algoritmo es ordenar las observaciones de forma que los puntos más cercanos se conviertan en vecinos en el ordenamiento. Se podría pensar como una representación numérica del dendograma de una agrupación jerárquica.
+
+Lanzamos el algoritmo OPTICS dejando el parámetro eps con su valor por defecto y fijando el criterio de vecindad en 10:
+
+```{r message=FALSE, warning=FALSE}
+res_wing_weight <- optics(wing_weight, minPts = 10)
+res_wing_weight
+
+res_wing_culmen <- optics(wing_culmen, minPts = 10)
+res_wing_culmen
+
+res_wing_hallax <- optics(wing_hallax, minPts = 10)
+res_wing_hallax
+
+res_weight_culmen <- optics(weight_culmen, minPts = 10)
+res_weight_culmen
+
+res_weight_hallax <- optics(weight_hallax, minPts = 10)
+res_weight_hallax
+
+res_culmen_hallax <- optics(culmen_hallax, minPts = 10)
+res_culmen_hallax
+```
+
+Obtenemos la ordenación de las observaciones o puntos:
+
+```{r message=FALSE, warning=FALSE}
+res_wing_weight$order
+res_wing_culmen$order
+res_wing_hallax$order
+res_weight_culmen$order
+res_weight_hallax$order
+res_culmen_hallax$order
+```
+
+Otro paso muy interesante del algoritmo es la generación de un diagrama de alcanzabilidad o reachability plot, en el que se aprecia de una forma visual la distancia de alcanzabilidad de cada punto. Los valles representan clusters (cuanto más profundo es el valle, más denso es el cluster), mientras que las cimas indican los puntos que están entre las agrupaciones (estos puntos son cadidatos a ser considerardos outliers).
+
+```{r message=FALSE, warning=FALSE}
+plot(res_wing_weight)
+plot(res_wing_culmen)
+plot(res_wing_hallax)
+plot(res_weight_culmen)
+plot(res_weight_hallax)
+plot(res_culmen_hallax)
+```
+
+Veamos otra representación del diagrama de alcanzabilidad, donde podemos observar las trazas de las distancias entre puntos cercanos del mismo cluster y entre clusters distintos.
+
+```{r message=FALSE, warning=FALSE}
+plot(wing_weight, col = "grey")
+polygon(wing_weight[res_wing_weight$order,])
+
+plot(wing_culmen, col = "grey")
+polygon(wing_culmen[res_wing_culmen$order,])
+
+plot(wing_hallax, col = "grey")
+polygon(wing_hallax[res_wing_hallax$order,])
+
+plot(weight_culmen, col = "grey")
+polygon(weight_culmen[res_weight_culmen$order,])
+
+plot(weight_hallax, col = "grey")
+polygon(weight_hallax[res_weight_hallax$order,])
+
+plot(culmen_hallax, col = "grey")
+polygon(culmen_hallax[res_culmen_hallax$order,])
+```
+
+#### DBSCAN
+
+Otro ejercicio interesante a realizar es extraer una agrupación de la ordenación realizada por OPTICS similar a lo que DBSCAN hubiera generado estableciendo el parámetro eps en eps_cl = 0.065. En este sentido animamos al estudiante a experimentar con diferentes valores de este parámetro.
+
+```{r message= FALSE, warning=FALSE}
+res_wing_weight <- extractDBSCAN(res_wing_weight, eps_cl = 0.06)
+res_wing_weight
+plot(res_wing_weight)
+
+res_wing_culmen <- extractDBSCAN(res_wing_culmen, eps_cl = 0.06)
+res_wing_culmen
+plot(res_wing_culmen)
+
+res_wing_hallax <- extractDBSCAN(res_wing_hallax, eps_cl = 0.06)
+res_wing_hallax
+plot(res_wing_hallax)
+
+res_weight_culmen <- extractDBSCAN(res_weight_culmen, eps_cl = 0.06)
+res_weight_culmen
+plot(res_weight_culmen)
+
+res_weight_hallax <- extractDBSCAN(res_weight_hallax, eps_cl = 0.06)
+res_weight_hallax
+plot(res_weight_hallax)
+
+res_culmen_hallax <- extractDBSCAN(res_culmen_hallax, eps_cl = 0.06)
+res_culmen_hallax
+plot(res_culmen_hallax)
+```
+
+Observamos en el gráfico anterior como se han coloreado los 4 clusters y en negro se mantienen los valores *outliers* o extremos.    
+
+Seguimos adelante con una representación gráfica que nos muestra los clusters mediante formas convexas.  
+
+```{r message= FALSE, warning=FALSE}
+hullplot(wing_weight, res_wing_weight)
+hullplot(wing_culmen, res_wing_culmen)
+hullplot(wing_hallax, res_wing_hallax)
+hullplot(weight_culmen, res_weight_culmen)
+hullplot(weight_hallax, res_weight_hallax)
+hullplot(culmen_hallax, res_culmen_hallax)
+```
+  
+Repetimos el experimento anterior incrementando el parámetro *epc_cl*, veamos como el efecto que produce es la concentración de clusters ya que flexibilizamos la condición de densidad.  
+
+```{r message= FALSE, warning=FALSE}
+res_wing_weight <- extractDBSCAN(res_wing_weight, eps_cl = 0.1)
+res_wing_weight
+plot(res_wing_weight)
+hullplot(wing_weight, res_wing_weight)
+
+
+res_wing_culmen <- extractDBSCAN(res_wing_culmen, eps_cl = 0.1)
+res_wing_culmen
+plot(res_wing_culmen)
+hullplot(wing_culmen, res_wing_culmen)
+
+
+res_wing_hallax <- extractDBSCAN(res_wing_hallax, eps_cl = 0.1)
+res_wing_hallax
+plot(res_wing_hallax)
+hullplot(wing_hallax, res_wing_hallax)
+
+
+res_weight_culmen <- extractDBSCAN(res_weight_culmen, eps_cl = 0.1)
+res_weight_culmen
+plot(res_weight_culmen)
+hullplot(weight_culmen, res_weight_culmen)
+
+
+res_weight_hallax <- extractDBSCAN(res_weight_hallax, eps_cl = 0.1)
+res_weight_hallax
+plot(res_weight_hallax)
+hullplot(weight_hallax, res_weight_hallax)
+
+
+res_culmen_hallax <- extractDBSCAN(res_culmen_hallax, eps_cl = 0.1)
+res_culmen_hallax
+plot(res_culmen_hallax)
+hullplot(culmen_hallax, res_culmen_hallax)
+```
+
+Veamos ahora una variante de la extracción **DBSCN** anterior. En ella el parámetro *xi* nos va a servir para clasificar los clusters en función del cambio en la densidad relativa de los mismos.  
+
+```{r message= FALSE, warning=FALSE}
+### Extracción del clustering jerárquico en función de la variación de la densidad por el método xi
+res_wing_weight <- extractXi(res_wing_weight, xi = 0.1)
+res_wing_weight
+plot(res_wing_weight)
+hullplot(wing_weight, res_wing_weight)
+
+
+res_wing_culmen <- extractXi(res_wing_culmen, xi = 0.1)
+res_wing_culmen
+plot(res_wing_culmen)
+hullplot(wing_culmen, res_wing_culmen)
+
+
+res_wing_hallax <- extractXi(res_wing_hallax, xi = 0.1)
+res_wing_hallax
+plot(res_wing_hallax)
+hullplot(wing_hallax, res_wing_hallax)
+
+
+res_weight_culmen <- extractXi(res_weight_culmen, xi = 0.1)
+res_weight_culmen
+plot(res_weight_culmen)
+hullplot(weight_culmen, res_weight_culmen)
+
+
+res_weight_hallax <- extractXi(res_weight_hallax, xi = 0.1)
+res_weight_hallax
+plot(res_weight_hallax)
+hullplot(weight_hallax, res_weight_hallax)
+
+
+res_culmen_hallax <- extractXi(res_culmen_hallax, xi = 0.1)
+res_culmen_hallax
+plot(res_culmen_hallax)
+hullplot(culmen_hallax, res_culmen_hallax)
+```
+
+## Ejercicio 3
+Realiza una comparativa de los métodos *k-means* y *DBSCAN*    
+
+### Respuesta 3
+
+#### K-Means vs DBSCAN
+
+El algoritmo DBSCAN agrupa los clústers en función de la densidad de la siguiente manera:
+
+1. Se asigna un mínimo número de puntos de vecindad y un radio máximo.
+2. Se escoge un punto aleatorio y se traza un círculo de radio igual al radio máximo asignado
+3. Si en el círculo trazado se encuentra un número de puntos igual o superior al mínimo número de puntos de vecindad, se incluye en el clúster y se origina un nuevo círculo a partir de estos. En caso contrario, se excluye.
+
+El algoritmo K-Means aprupa los clústers de la siguiente manera:
+
+1. Se asigna un número k de clúster establecidos de antemano a partir de puntos escogidos aleatoriamente.
+2. Se asignan puntos a un clúster en función de la mínima distancia del punto al clúster.
+3. Se reasigna que punto se considera el centro del clúster a partir de la media de todas las distancias obtenidas en el clúster.
+4. Se repite hasta que no se pueda mejorar más.
+
+Ambos algoritmos requieren que se les introduzca valores de antemano para calibrar la agrupación que generan y ambos son de tipo no supervisado. 
+
+DBSCAN es mejor que K-Means en tanto y en cuanto éste es capaz de adaptarse a figuras más irregulares, diferentes densidades y el número de clústers no está predefinido, sin embargo, K-Means resulta más eficiente si hablamos de tiempo computacional y DBSCAN también requiere de parámetros iniciales para realizar el cálculo.
+
+#### Comparando valores
+
+Hemos observado como ambos algoritmos son capaces de agrupar características en función de lo agrupados que se encuentran los puntos, aunque todo depende de que parámetros iniciales se escogan. 
+
+#### Conclusión final
+
+Ambos algoritmos no han sido capaces de generar agrupaciones que corresponan al tipo de espécie, por lo que podemos concluir que que las características *Wing*, *Weight*, *Culmen* y *Hallax* no pueden determinar la espécie a la que pertenece un halcón, pues la relación de estas variables entre ellas es muy débil y sus puntos se encuentras muy diluidos entre sí.
+
